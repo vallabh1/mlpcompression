@@ -12,7 +12,7 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 import wandb
 
 
-from t import LitAutoEncoder
+from litautoencoder import LitAutoEncoder
 
 class BrierScore3D:
     def __init__(self,n_classes = 21,no_void = True,one_hot = False):
