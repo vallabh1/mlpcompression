@@ -217,7 +217,7 @@ class ObservationDataset(Dataset):
 
 
 num_classes = 21
-encoded_dim = 10
+encoded_dim = 2
 # Create a dataset and split it into train, validation, and test sets
 dataset = ObservationDataset(observations, gt)
 train_size = int(0.8 * len(dataset))
@@ -233,7 +233,7 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-checkpoint_path = 'checkpoints\encoded_dim_10-mseloss-na-epoch=176-val_loss=0.00037.ckpt'
+checkpoint_path = 'checkpoints\encoded_dim_2-mseloss-na-epoch=95-val_loss=0.00574.ckpt'
 model = LitAutoEncoder.load_from_checkpoint(checkpoint_path, encoder=Encoder(num_classes, encoded_dim), decoder=Decoder(encoded_dim, num_classes))
 
 
@@ -271,12 +271,12 @@ for batch_idx, dict in enumerate(test_loader):
     brier_normal.update_bins(out_normal.detach().cpu().numpy(), gt.detach().cpu().numpy())
 
 print(miou.get_IoUs())
-print(miou_normal.get_IoUs())
+# print(miou_normal.get_IoUs())
 print(cali.get_ECEs())
-print(cali_normal.get_ECEs())
+# print(cali_normal.get_ECEs())
 print(cali.get_mECE())
-print(cali_normal.get_mECE())
+# print(cali_normal.get_mECE())
 print(cali.get_TL_ECE())
-print(cali_normal.get_TL_ECE())
+# print(cali_normal.get_TL_ECE())
 print(brier.return_score())
-print(brier_normal.return_score())
+# print(brier_normal.return_score())
