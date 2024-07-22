@@ -134,9 +134,11 @@ class LitAutoEncoder(L.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
     
-    def forward(self,x):
+    def forward(self,x, num_obs, encoded_dim):
+        classes = x.shape[1]
         y = self.encoder(x)
-        y_hat = torch.mean(y, dim=0)
+        y = y.view(-1, num_obs, encoded_dim)
+        y_hat = torch.mean(y, dim=1)
         z = self.decoder(y_hat)
         return z
        
