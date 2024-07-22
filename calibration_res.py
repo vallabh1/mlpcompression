@@ -227,27 +227,48 @@ train_dataset, val_dataset, test_dataset = random_split(
     dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(42)
 )
 
-checkpoint_path = 'lightning_logs\kfza3uc7\checkpoints\epoch=59-step=15000.ckpt'
+batch_size = 32
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+
+checkpoint_path = 'checkpoints\encoded_dim_10-mseloss-na-epoch=176-val_loss=0.00037.ckpt'
 model = LitAutoEncoder.load_from_checkpoint(checkpoint_path, encoder=Encoder(num_classes, encoded_dim), decoder=Decoder(encoded_dim, num_classes))
 
-print(train_dataset[0]['obs'].shape)
+
+
+
+
 miou = Cumulative_mIoU(n_classes=num_classes)
 miou_normal = Cumulative_mIoU(n_classes=num_classes)
 cali = mECE_Calibration_calc_3D(one_hot=False)
 cali_normal = mECE_Calibration_calc_3D(one_hot=False)
 brier = BrierScore3D()
 brier_normal = BrierScore3D()
-for i in range(len(train_dataset)):
-    obs = train_dataset[i]['obs']
-    gt = train_dataset[i]['gt']
-    out = model(torch.Tensor(obs).to(device))
-    out_normal = np.mean(obs, axis=0)
-    cali.update_bins((out.detach().cpu().numpy()).reshape(1,-1), gt)
-    miou.update_counts(np.argmax(out.detach().cpu().numpy()),gt)
-    brier.update_bins((out.detach().cpu().numpy()).reshape(1,-1), np.array(gt))
-    cali_normal.update_bins(out_normal.reshape(1,-1), gt)
-    miou_normal.update_counts(np.argmax(out_normal), gt)
-    brier_normal.update_bins(out_normal.reshape(1,-1), np.array(gt))
+
+for batch_idx, dict in enumerate(test_loader):
+    obs = (dict['obs'].to(device)).to(dtype=torch.float32)
+    gt = (dict['gt'].to(device)).to(dtype=torch.float32)
+    num_obs = obs.shape[1]
+
+    encodeinput = obs.view(-1, num_classes)
+    out = model(encodeinput, num_obs=num_obs, encoded_dim=encoded_dim)
+    out_normal = torch.mean(obs, dim=1)
+
+    # if batch_idx == 1:
+    #     print(np.argmax(out.detach().cpu().numpy(), axis=1))
+    #     print(gt.detach().cpu().numpy())
+    #     print(np.argmax(out_normal.detach().cpu().numpy(), axis=1))
+    # print(f'out shape: {out.shape}')
+    # print(f'gt shape: {gt.shape}')
+    # print(f'outnormal shape: {out_normal.shape}')
+    cali.update_bins((out.detach().cpu().numpy()), gt.detach().cpu().numpy())
+    miou.update_counts(np.argmax(out.detach().cpu().numpy(), axis=1),gt.detach().cpu().numpy())
+    brier.update_bins((out.detach().cpu().numpy()), gt.detach().cpu().numpy())
+    cali_normal.update_bins(out_normal.detach().cpu().numpy(), gt.detach().cpu().numpy())
+    miou_normal.update_counts(np.argmax(out_normal.detach().cpu().numpy(), axis=1), gt.detach().cpu().numpy())
+    brier_normal.update_bins(out_normal.detach().cpu().numpy(), gt.detach().cpu().numpy())
 
 print(miou.get_IoUs())
 print(miou_normal.get_IoUs())
