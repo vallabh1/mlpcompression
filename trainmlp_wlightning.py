@@ -17,7 +17,7 @@ import wandb
 # Check if a GPU is available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 wandb_logger = WandbLogger(log_model="all")
-wandb.init(project="encoded_10-loss_mae-fusion_na-aritificial")
+wandb.init(project="encoded_6-loss_mae-fusion_na-aritificial")
 # Define the encoder MLP with four layers
 
 
@@ -58,9 +58,10 @@ class Decoder(nn.Module):
 
 
 num_classes = 21
-encoded_dim = 10
+encoded_dim = 6
 # lossf = nn.KLDivLoss(reduction='batchmean')
 # lossf = nn.MSELoss()
+# lossf = nn.L1Loss(reduction='sum') 
 lossf = nn.L1Loss() # MAE loss
 
 class LitAutoEncoder(L.LightningModule):
@@ -185,7 +186,7 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num
 mlpcompression = LitAutoEncoder(Encoder(num_classes, encoded_dim), Decoder(encoded_dim, num_classes))
 
 # train model
-trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=400, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath='./checkpoints',filename='encoded_dim_10-maeloss-na-{epoch}-{val_loss:.5f}',monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=25, min_delta=0.0)])
+trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=1000, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath='./checkpoints',filename='encoded_dim_6-maeloss-na-{epoch}-{val_loss:.5f}',monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=50, min_delta=0.0)])
 trainer.fit(model=mlpcompression, train_dataloaders=train_loader, val_dataloaders=val_loader)
 trainer.test(model=mlpcompression, dataloaders=test_loader)
 

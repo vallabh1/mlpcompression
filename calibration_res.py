@@ -217,7 +217,7 @@ class ObservationDataset(Dataset):
 
 
 num_classes = 21
-encoded_dim = 2
+encoded_dim = 10
 # Create a dataset and split it into train, validation, and test sets
 dataset = ObservationDataset(observations, gt)
 train_size = int(0.8 * len(dataset))
@@ -233,7 +233,7 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-checkpoint_path = 'checkpoints\encoded_dim_2-mseloss-na-epoch=95-val_loss=0.00574.ckpt'
+checkpoint_path = 'checkpoints/encoded_dim_10-l1sumloss-na-epoch=399-val_loss=7.00020.ckpt'
 model = LitAutoEncoder.load_from_checkpoint(checkpoint_path, encoder=Encoder(num_classes, encoded_dim), decoder=Decoder(encoded_dim, num_classes))
 
 
