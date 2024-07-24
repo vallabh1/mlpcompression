@@ -233,7 +233,7 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-checkpoint_path = 'checkpoints/encoded_dim_10-kldivloss-na-epoch=85-val_loss=0.16025.ckpt'
+checkpoint_path = 'checkpoints/encoded_dim_10-cumsum_mseloss-na-epoch=405-val_loss=0.00030.ckpt'
 model = LitAutoEncoder.load_from_checkpoint(checkpoint_path, encoder=Encoder(num_classes, encoded_dim), decoder=Decoder(encoded_dim, num_classes))
 
 
