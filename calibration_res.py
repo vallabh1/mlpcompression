@@ -233,7 +233,7 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-checkpoint_path = 'checkpoints/encoded_dim_10-l1sumloss-na-epoch=399-val_loss=7.00020.ckpt'
+checkpoint_path = 'checkpoints/encoded_dim_10-kldivloss-na-epoch=85-val_loss=0.16025.ckpt'
 model = LitAutoEncoder.load_from_checkpoint(checkpoint_path, encoder=Encoder(num_classes, encoded_dim), decoder=Decoder(encoded_dim, num_classes))
 
 
@@ -247,9 +247,9 @@ cali_normal = mECE_Calibration_calc_3D(one_hot=False)
 brier = BrierScore3D()
 brier_normal = BrierScore3D()
 
-for batch_idx, dict in enumerate(test_loader):
-    obs = (dict['obs'].to(device)).to(dtype=torch.float32)
-    gt = (dict['gt'].to(device)).to(dtype=torch.float32)
+for batch_idx, batch in enumerate(test_loader):
+    obs = (batch['obs'].to(device)).to(dtype=torch.float32)
+    gt = (batch['gt'].to(device)).to(dtype=torch.float32)
     num_obs = obs.shape[1]
 
     encodeinput = obs.view(-1, num_classes)
