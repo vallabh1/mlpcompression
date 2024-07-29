@@ -43,11 +43,11 @@ train_dataset, val_dataset, test_dataset = random_split(
 # print((test_dataset[0]['obs']))
 # test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-checkpoint_path10 = 'checkpoints/encoded_dim_10-mseloss-na-epoch=176-val_loss=0.00037.ckpt'
-checkpoint_path8 = 'checkpoints/encoded_dim_8-mseloss-na-epoch=163-val_loss=0.00067.ckpt'
-checkpoint_path6 = 'checkpoints/encoded_dim_6-mseloss-na-epoch=120-val_loss=0.00125.ckpt'
-checkpoint_path4 = 'checkpoints/encoded_dim_4-mseloss-na-epoch=79-val_loss=0.00259.ckpt'
-checkpoint_path2 = 'checkpoints/encoded_dim_2-mseloss-na-epoch=88-val_loss=0.00571.ckpt'
+checkpoint_path10 = 'checkpoints\encoded_dim_10-maeloss-na-epoch=495-val_loss=0.01007.ckpt'
+checkpoint_path8 = 'checkpoints\encoded_dim_8-maeloss-na-epoch=485-val_loss=0.01230.ckpt'
+checkpoint_path6 = 'checkpoints\encoded_dim_6-maeloss-na-epoch=239-val_loss=0.01595.ckpt'
+checkpoint_path4 = 'checkpoints\encoded_dim_4-maeloss-na-epoch=170-val_loss=0.02251.ckpt'
+checkpoint_path2 = 'checkpoints\encoded_dim_2-maeloss-na-epoch=89-val_loss=0.03316.ckpt'
 
 model10 = LitAutoEncoder.load_from_checkpoint(checkpoint_path10, encoder=Encoder(num_classes, 10), decoder=Decoder(10, num_classes))
 model8 = LitAutoEncoder.load_from_checkpoint(checkpoint_path8, encoder=Encoder(num_classes, 8), decoder=Decoder(8, num_classes))
@@ -57,7 +57,7 @@ model2 = LitAutoEncoder.load_from_checkpoint(checkpoint_path2, encoder=Encoder(n
 
 
 
-for i in range(5):
+for i in range(3):
     # if i == 0:
     obs = torch.Tensor(test_dataset[i]['obs']).to(device)
     obs = obs.view(1,-1, num_classes)
@@ -70,12 +70,12 @@ for i in range(5):
     out6 = model6(encodeinput, num_obs=num_obs, encoded_dim=6)
     out4 = model4(encodeinput, num_obs=num_obs, encoded_dim=4)
     out2 = model2(encodeinput, num_obs=num_obs, encoded_dim=2)
-    out_normal = torch.mean(obs, dim=1)
+    # out_normal = torch.mean(obs, dim=1)
     print(f'10: {out10}')
-    # print(f'8: {out8}')
-    # print(f'6: {out6}')
-    # print(f'4: {out4}')
-    # print(f'2: {out2}')
-    print(f'normal: {out_normal}')
+    print(f'8: {out8}')
+    print(f'6: {out6}')
+    print(f'4: {out4}')
+    print(f'2: {out2}')
+    # print(f'normal: {out_normal}')
 
 
