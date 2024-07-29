@@ -301,6 +301,7 @@ for batch_idx, batch in enumerate(test_loader):
         out_normal.detach().cpu().numpy(), gt.detach().cpu().numpy())
 
 
+
 print(miou.get_IoUs())
 # print(miou_normal.get_IoUs())
 print(cali.get_ECEs())
