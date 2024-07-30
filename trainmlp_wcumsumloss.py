@@ -19,7 +19,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 wandb_logger = WandbLogger(log_model="all")
 # wandb.init(project="encoded_2-loss_cumsum_mse-fusion_na-aritificial")
 # Define the encoder MLP with four layers
-wandb.init(project='loss_cumsum_kldiv-fusion_na-aritificial')
+wandb.init(project='loss_cumsum_mae-fusion_na-aritificial')
 
 
 class Encoder(nn.Module):
@@ -60,10 +60,10 @@ class Decoder(nn.Module):
 
 num_classes = 21
 encoded_dim = 2
-lossf = nn.KLDivLoss(reduction='batchmean')
+# lossf = nn.KLDivLoss(reduction='batchmean')
 # lossf = nn.MSELoss()
 # lossf = nn.L1Loss(reduction='sum') 
-# lossf = nn.L1Loss() # MAE loss
+lossf = nn.L1Loss() # MAE loss
 
 class LitAutoEncoder(L.LightningModule):
     def __init__(self, encoder, decoder):
@@ -100,7 +100,7 @@ class LitAutoEncoder(L.LightningModule):
         output_vector_encoded_fusion = self.decoder(decodeinput)
         output_vector_encoded_fusion = output_vector_encoded_fusion.view(-1, num_obs, num_classes)
         # Compute the loss
-        output_vector_encoded_fusion = torch.log(output_vector_encoded_fusion)
+        # output_vector_encoded_fusion = torch.log(output_vector_encoded_fusion) # for KL divergence loss
         loss = lossf(output_vector_encoded_fusion, ground_truth)
         self.log("train_loss",loss)
         return loss
@@ -134,7 +134,7 @@ class LitAutoEncoder(L.LightningModule):
         output_vector_encoded_fusion = self.decoder(decodeinput)
         output_vector_encoded_fusion = output_vector_encoded_fusion.view(-1, num_obs, num_classes)
         # Compute the loss
-        output_vector_encoded_fusion = torch.log(output_vector_encoded_fusion)
+        # output_vector_encoded_fusion = torch.log(output_vector_encoded_fusion) # for KL divergence loss
 
         test_loss = lossf(output_vector_encoded_fusion, ground_truth)
         self.log("test_loss",test_loss)
@@ -169,7 +169,7 @@ class LitAutoEncoder(L.LightningModule):
         output_vector_encoded_fusion = self.decoder(decodeinput)
         output_vector_encoded_fusion = output_vector_encoded_fusion.view(-1, num_obs, num_classes)
         # Compute the loss
-        output_vector_encoded_fusion = torch.log(output_vector_encoded_fusion)
+        # output_vector_encoded_fusion = torch.log(output_vector_encoded_fusion) # for KL divergence loss
         loss = lossf(output_vector_encoded_fusion, ground_truth)
         self.log("val_loss",loss)
 
@@ -220,7 +220,7 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 mlpcompression = LitAutoEncoder(Encoder(num_classes, encoded_dim), Decoder(encoded_dim, num_classes))
 
 # train model
-trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=1000, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath='./checkpoints',filename='encoded_dim_2-cumsum_kldivloss-na-{epoch}-{val_loss:.5f}',monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=50, min_delta=0.0)])
+trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=1000, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath='checkpoints/artificial_dataset_weights/maeloss_weights/cumulative_sumloss_weights',filename='encoded_dim_2-cumsum_maeloss-na-{epoch}-{val_loss:.5f}',monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=50, min_delta=0.0)])
 trainer.fit(model=mlpcompression, train_dataloaders=train_loader, val_dataloaders=val_loader)
 trainer.test(model=mlpcompression, dataloaders=test_loader)
 
