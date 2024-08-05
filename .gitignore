@@ -1,3 +1,7 @@
 *.hdf5
 *.pth
-wandb/
+*.h5py
+artificial/wandb
+real_dataset/wandb
+artificial/checkpoints/lightning_logs
+real_dataset/checkpoints/lightning_logs
