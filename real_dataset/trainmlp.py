@@ -12,15 +12,12 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
 import wandb
 
-
-
 # Check if a GPU is available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 wandb_logger = WandbLogger(log_model="all")
-wandb.init(project="encoded_10-loss_mse-fusion_na-real_dataset")
+wandb.init(project="loss_mse-fusion_na-real_dataset")
+
 # Define the encoder MLP with four layers
-
-
 class Encoder(nn.Module):
     def __init__(self, input_dim, encoded_dim):
         super(Encoder, self).__init__()
@@ -37,8 +34,6 @@ class Encoder(nn.Module):
         return x
 
 # Define the decoder MLP with four layers
-
-
 class Decoder(nn.Module):
     def __init__(self, encoded_dim, output_dim):
         super(Decoder, self).__init__()
@@ -55,8 +50,6 @@ class Decoder(nn.Module):
         x = F.softmax(x, dim=-1)
         return x
 
-
-
 num_classes = 21
 encoded_dim = 10
 lossf = nn.MSELoss()
@@ -66,88 +59,104 @@ class LitAutoEncoder(L.LightningModule):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
-        self.smax1 = nn.Softmax(dim=1)
-
-    def _process_batch(self, batch):
-        voxel_observations = batch.to(device).to(dtype=torch.float32)
-        # print("HERE")
-        # Find the valid rows (non-zero observations)
-        valid_mask = ~torch.all(voxel_observations == 0, dim=2)
-        valid_voxel_observations = [self.smax1(voxel_observations[i][valid_mask[i]]) for i in range(voxel_observations.size(0))]
-        # print(type(valid_voxel_observations[0]))
-
-        # If no valid observations for a voxel, add a dummy row (this can be handled as a special case if needed)
-        # valid_voxel_observations = [obs if obs.size(0) > 0 else torch.zeros(1, obs.size(1)).to(device) for obs in valid_voxel_observations]
-        # print('HERE2')
-        return valid_voxel_observations
+        self.smax2 = nn.Softmax(dim=2)
 
     def training_step(self, batch, batch_idx):
-        # print('HERE0')
-        valid_voxel_observations = self._process_batch(batch)
-       
-        fused_encoded_vectors = []
-        ground_truth_vectors = []
-        # print("HERE3")
-        for voxel in valid_voxel_observations:
-            # print(torch.sum(voxel[0]))
-            ground_truth_vectors.append(torch.mean(voxel, dim=0))
-            # print(torch.mean(voxel, dim=0))
-            encodeinput = voxel.view(-1, num_classes)
-            encoded_vectors = self.encoder(encodeinput)
-            fused_encoded_vectors.append(torch.mean(encoded_vectors, dim=0))
-        
-        ground_truth = torch.stack(ground_truth_vectors)
-        fused_encoded_vector = torch.stack(fused_encoded_vectors)
-        output_vector_encoded_fusion = self.decoder(fused_encoded_vector)
-        # print(ground_truth.shape)
-        # print(output_vector_encoded_fusion.shape)
-        # Compute the loss
-        if batch_idx % 500 == 0:
-            print(ground_truth[0])
-            print(output_vector_encoded_fusion[0])
+        voxel_observations = batch.to(device).to(dtype=torch.float32)
 
+        # Create a mask for non-zero observations
+        valid_mask = ~torch.all(voxel_observations == 0, dim=2, keepdim=True)
+        # print(valid_mask.shape)
+        # print(valid_mask[0]
+        voxel_observations = self.smax2(voxel_observations)
+        voxel_observations[(~valid_mask).squeeze()] = float('nan')
+        # print(voxel_observations[0,0])
+        # Compute mean ignoring NaNs
+        ground_truth = torch.nanmean(voxel_observations, dim=1)
+        voxel_observations[(~valid_mask).squeeze()] = 0
+        encodeinput = voxel_observations.view(-1, num_classes)
+        valid_mask = valid_mask.view(-1, 1)
+
+        # Encode only valid observations
+        fused_encoded_vectors = self.encoder(encodeinput)
+        # if batch_idx % 2000 == 0:
+        #     print(f'encodeinput:{encodeinput[0]}')
+        #     print(f'fev: {fused_encoded_vectors[0]}')
+        fused_encoded_vectors[(~valid_mask).squeeze()] = 0  # Set invalid encodings to zero
+
+        # Reshape back to original shape
+        fused_encoded_vectors = fused_encoded_vectors.view(batch.size(0), batch.size(1), -1)
+
+        # Compute mean ignoring invalid encodings
+        fused_encoded_vector = torch.sum(fused_encoded_vectors, dim=1) / valid_mask.view(batch.size(0), batch.size(1)).sum(dim=1, keepdim=True)
+
+        output_vector_encoded_fusion = self.decoder(fused_encoded_vector)
+
+        if batch_idx % 2000 == 0:
+            print(f'gt: {ground_truth[0]}')
+            print(f' res: {output_vector_encoded_fusion[0]}')
+
+        # Compute the loss
         loss = lossf(output_vector_encoded_fusion, ground_truth)
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        # print('HERE0')
-        valid_voxel_observations = self._process_batch(batch)
-       
-        fused_encoded_vectors = []
-        ground_truth_vectors = []
-        for voxel in valid_voxel_observations:
-            # print(voxel.shape)
-            ground_truth_vectors.append(torch.mean(voxel, dim=0))
-            encodeinput = voxel.view(-1, num_classes)
-            encoded_vectors = self.encoder(encodeinput)
-            fused_encoded_vectors.append(torch.mean(encoded_vectors, dim=0))
-       
-        ground_truth = torch.stack(ground_truth_vectors)
-        fused_encoded_vector = torch.stack(fused_encoded_vectors)
+        voxel_observations = batch.to(device).to(dtype=torch.float32)
+
+        # Create a mask for non-zero observations
+        valid_mask = ~torch.all(voxel_observations == 0, dim=2, keepdim=True)
+        voxel_observations = self.smax2(voxel_observations)
+        voxel_observations[(~valid_mask).squeeze()] = float('nan')
+
+        # Compute mean ignoring NaNs
+        ground_truth = torch.nanmean(voxel_observations, dim=1)
+        voxel_observations[(~valid_mask).squeeze()] = 0
+        encodeinput = voxel_observations.view(-1, num_classes)
+        valid_mask = valid_mask.view(-1, 1)
+
+        # Encode only valid observations
+        fused_encoded_vectors = self.encoder(encodeinput)
+        fused_encoded_vectors[(~valid_mask).squeeze()] = 0  # Set invalid encodings to zero
+
+        # Reshape back to original shape
+        fused_encoded_vectors = fused_encoded_vectors.view(batch.size(0), batch.size(1), -1)
+
+        # Compute mean ignoring invalid encodings
+        fused_encoded_vector = torch.sum(fused_encoded_vectors, dim=1) / valid_mask.view(batch.size(0), batch.size(1)).sum(dim=1, keepdim=True)
+
         output_vector_encoded_fusion = self.decoder(fused_encoded_vector)
-        # print(ground_truth.shape)
-        # print(output_vector_encoded_fusion.shape)
 
         # Compute the loss
         val_loss = lossf(output_vector_encoded_fusion, ground_truth)
         self.log("val_loss", val_loss)
 
     def test_step(self, batch, batch_idx):
-        valid_voxel_observations = self._process_batch(batch)
-       
-        fused_encoded_vectors = []
-        ground_truth_vectors = []
-        for voxel in valid_voxel_observations:
-            ground_truth_vectors.append(torch.mean(voxel, dim=0))
-            encodeinput = voxel.view(-1, num_classes)
-            encoded_vectors = self.encoder(encodeinput)
-            fused_encoded_vectors.append(torch.mean(encoded_vectors, dim=0))
+        voxel_observations = batch.to(device).to(dtype=torch.float32)
 
-        ground_truth = torch.stack(ground_truth_vectors)
-        fused_encoded_vector = torch.stack(fused_encoded_vectors)
+        # Create a mask for non-zero observations
+        valid_mask = ~torch.all(voxel_observations == 0, dim=2, keepdim=True)
+        voxel_observations = self.smax2(voxel_observations)
+        voxel_observations[(~valid_mask).squeeze()] = float('nan')
+
+        # Compute mean ignoring NaNs
+        ground_truth = torch.nanmean(voxel_observations, dim=1)
+        voxel_observations[(~valid_mask).squeeze()] = 0
+        encodeinput = voxel_observations.view(-1, num_classes)
+        valid_mask = valid_mask.view(-1, 1)
+
+        # Encode only valid observations
+        fused_encoded_vectors = self.encoder(encodeinput)
+        fused_encoded_vectors[(~valid_mask).squeeze()] = 0  # Set invalid encodings to zero
+
+        # Reshape back to original shape
+        fused_encoded_vectors = fused_encoded_vectors.view(batch.size(0), batch.size(1), -1)
+
+        # Compute mean ignoring invalid encodings
+        fused_encoded_vector = torch.sum(fused_encoded_vectors, dim=1) / valid_mask.view(batch.size(0), batch.size(1)).sum(dim=1, keepdim=True)
+
         output_vector_encoded_fusion = self.decoder(fused_encoded_vector)
-       
+
         # Compute the loss
         test_loss = lossf(output_vector_encoded_fusion, ground_truth)
         self.log("test_loss", test_loss)
@@ -156,19 +165,13 @@ class LitAutoEncoder(L.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-
-
 # Load the synthetic dataset
 f = h5py.File('train.h5py', 'r')
 observations = f['logits']
-observations = observations
-# labels = f['label']
-
 
 class ObservationDataset(Dataset):
     def __init__(self, observations):
         self.observations = observations
-        
 
     def __len__(self):
         return self.observations.shape[0]
@@ -181,21 +184,17 @@ dataset = ObservationDataset(observations)
 train_size = int(0.8 * len(dataset))
 val_size = int(0.1 * len(dataset))
 test_size = len(dataset) - train_size - val_size
-train_dataset, val_dataset, test_dataset = random_split(
-    dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(42))
+train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(42))
 
 # Create DataLoaders for each dataset
 batch_size = 32
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=31)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=31)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=31)
 
 mlpcompression = LitAutoEncoder(Encoder(num_classes, encoded_dim), Decoder(encoded_dim, num_classes))
 
-# train model
-trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=500, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath='./checkpoints',filename='encoded_dim_10-mseloss-na-{epoch}-{val_loss:.5f}',monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=10, min_delta=0.0)])
+# Train model
+trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=500, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath='./checkpoints', filename='encoded_dim_10-mseloss-na-{epoch}-{val_loss:.5f}', monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=5, min_delta=0.0)])
 trainer.fit(model=mlpcompression, train_dataloaders=train_loader, val_dataloaders=val_loader)
 trainer.test(model=mlpcompression, dataloaders=test_loader)
-
-
