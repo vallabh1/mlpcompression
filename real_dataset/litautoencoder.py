@@ -9,68 +9,8 @@ from torch.utils.data import DataLoader, Dataset, random_split
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 import wandb
-import argparse
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Train AutoEncoder with different loss functions and encoded dimensions.')
-    parser.add_argument('--loss', type=str, choices=['mse', 'kldiv', 'mae'], default='kldiv', help='Loss function to use')
-    parser.add_argument('--encoded_dim', type=int, default=10, help='Dimension of the encoded representation')
-    return parser.parse_args()
-
-args = parse_args()
-
-if args.loss == 'mse':
-    lossf = nn.MSELoss()
-elif args.loss == 'kldiv':
-    lossf = nn.KLDivLoss(reduction='batchmean')
-elif args.loss == 'mae':
-    lossf = nn.L1Loss()
-
-torch.set_float32_matmul_precision('medium')
-# Check if a GPU is available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-wandb_logger = WandbLogger(log_model="all")
-wandb.init(project=f"loss_{args.loss}-fusion_na-real_dataset")
-
-# Define the encoder MLP with four layers
-class Encoder(nn.Module):
-    def __init__(self, input_dim, encoded_dim):
-        super(Encoder, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, encoded_dim)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
-
-# Define the decoder MLP with four layers
-class Decoder(nn.Module):
-    def __init__(self, encoded_dim, output_dim):
-        super(Decoder, self).__init__()
-        self.fc1 = nn.Linear(encoded_dim, 64)
-        self.fc2 = nn.Linear(64, 128)
-        self.fc3 = nn.Linear(128, 256)
-        self.fc4 = nn.Linear(256, output_dim)
-
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
-        x = F.softmax(x, dim=-1)
-        return x
-
-num_classes = 21
-encoded_dim = args.encoded_dim
-# lossf = nn.MSELoss()
-# lossf = nn.KLDivLoss(reduction='batchmean')
 
 class LitAutoEncoder(L.LightningModule):
     def __init__(self, encoder, decoder):
@@ -246,60 +186,20 @@ class LitAutoEncoder(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
-
-# Load the synthetic dataset
-# f = h5py.File('train.h5py', 'r')
-# observations = f['logits']
-
-class ObservationDataset(Dataset):
-        
-    def __init__(self, dataset_dir, size):
-        self.dataset_dir = dataset_dir
-        self.size = size
-
-    def __len__(self):
-        return self.size
-
-    def __getitem__(self, idx):
-        return self.observations[idx]
     
-    def starth5py(self):
-        self.f = h5py.File(self.dataset_dir, 'r')
-        self.observations = self.f['logits']
-    
-    @staticmethod
-    def worker_init_fn(worker_id):
-        worker_info = torch.utils.data.get_worker_info()
-        dataset = worker_info.dataset.dataset
-        dataset.starth5py()
-        
+    def forward(self, encodeinput, valid_mask, size0, size1):
+        fused_encoded_vectors = self.encoder(encodeinput)
+        # if batch_idx % 2000 == 0:
+        #     print(f'encodeinput:{encodeinput[0]}')
+        #     print(f'fev: {fused_encoded_vectors[0]}')
+        fused_encoded_vectors[(~valid_mask).squeeze()] = 0  # Set invalid encodings to zero
 
+        # Reshape back to original shape
+        fused_encoded_vectors = fused_encoded_vectors.view(size0, size1, -1)
 
+        # Compute mean ignoring invalid encodings
+        fused_encoded_vector = torch.sum(fused_encoded_vectors, dim=1) / valid_mask.view(size0, size1).sum(dim=1, keepdim=True)
 
-# Create a dataset and split it into train, validation, and test sets
-dataset = ObservationDataset(dataset_dir='train.h5py', size=20239180)
-train_size = int(0.8 * len(dataset))
-val_size = int(0.1 * len(dataset))
-test_size = len(dataset) - train_size - val_size
-train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(42))
+        output_vector_encoded_fusion = self.decoder(fused_encoded_vector)
 
-# Create DataLoaders for each dataset
-batch_size = 1024
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8, prefetch_factor=5, persistent_workers=True, pin_memory=True, worker_init_fn=ObservationDataset.worker_init_fn)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8, prefetch_factor=5, persistent_workers=True, pin_memory=True, worker_init_fn=ObservationDataset.worker_init_fn)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=8, prefetch_factor=5, persistent_workers=True, pin_memory=True, worker_init_fn=ObservationDataset.worker_init_fn)
-
-mlpcompression = LitAutoEncoder(Encoder(num_classes, encoded_dim), Decoder(encoded_dim, num_classes))
-
-# Train model
-# lr_monitor = LearningRateMonitor(logging_interval='step')
-trainer = L.Trainer(default_root_dir='./checkpoints', max_epochs=500, logger=wandb_logger, callbacks=[ModelCheckpoint(dirpath=f'./checkpoints/{args.loss}loss_weights/encoded_dim_{encoded_dim}', filename='na-{epoch}-{val_loss:.5f}', monitor="val_loss", mode="min", save_top_k=2), EarlyStopping(monitor="val_loss", mode="min", patience=5, min_delta=0.0)])
-trainer.fit(model=mlpcompression, train_dataloaders=train_loader, val_dataloaders=val_loader)
-trainer.test(model=mlpcompression, dataloaders=test_loader)
-
-# try:
-    # trainer.fit(model=mlpcompression, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path="checkpoints/encoded_dim_10-kldivloss-na-epoch=7-val_loss=0.00221.ckpt")
-    # trainer.test(model=mlpcompression, dataloaders=test_loader)
-# except Exception as e:
-#     print(f"An error occurred: {e}")
-#     trainer.save_checkpoint('latest.ckpt')
+        return output_vector_encoded_fusion

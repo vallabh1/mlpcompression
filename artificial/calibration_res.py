@@ -261,7 +261,7 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-checkpoint_path = 'checkpoints/encoded_dim_2-cumsum_mseloss-na-epoch=121-val_loss=0.00560.ckpt'
+checkpoint_path = 'checkpoints/artificial_dataset_weights/mseloss_weights/encoded_dim_2-mseloss-na-epoch=95-val_loss=0.00574.ckpt'
 model = LitAutoEncoder.load_from_checkpoint(checkpoint_path, encoder=Encoder(
     num_classes, encoded_dim), decoder=Decoder(encoded_dim, num_classes))
 
@@ -286,8 +286,8 @@ for batch_idx, batch in enumerate(test_loader):
     #     print(np.argmax(out.detach().cpu().numpy(), axis=1))
     #     print(gt.detach().cpu().numpy())
     #     print(np.argmax(out_normal.detach().cpu().numpy(), axis=1))
-    # print(f'out shape: {out.shape}')
-    # print(f'gt shape: {gt.shape}')
+    print(f'out shape: {out.shape}')
+    print(f'gt shape: {gt.shape}')
     # print(f'outnormal shape: {out_normal.shape}')
     cali.update_bins((out.detach().cpu().numpy()), gt.detach().cpu().numpy())
     miou.update_counts(np.argmax(out.detach().cpu().numpy(),
